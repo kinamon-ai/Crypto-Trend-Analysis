@@ -5,6 +5,7 @@ import datetime
 import time
 import sys
 import numpy as np
+import yfinance as yf
 
 # --- Configuration ---
 SYMBOL = 'BTC/USDT'
@@ -69,6 +70,69 @@ def fetch_data(exchange, symbol, timeframe, limit, retries=3):
             print(f"Error fetching data for {timeframe} (Attempt {attempt+1}/{retries}): {e}")
             time.sleep(1 * (attempt + 1)) # Exponential backoff
     return None, last_error
+
+def fetch_data_yfinance(symbol, timeframe, limit=1000):
+    """
+    Fetches OHLCV data from Yahoo Finance.
+    More reliable for cloud hosting as it lacks geo-blocks.
+    """
+    # Mapping timeframe to yfinance intervals
+    tf_map = {
+        '1M': '1mo',
+        '1w': '1wk',
+        '1d': '1d',
+        '4h': '1h', # yfinance doesn't support 4h directly. Will use 1h and resample? Or just use 1h.
+        '1h': '1h'
+    }
+    
+    # Mapping crypto symbols (e.g. BTC/USDT -> BTC-USD)
+    yfm_symbol = symbol.replace("/USDT", "-USD").replace("/USD", "-USD")
+    if "/" in symbol and "-USD" not in yfm_symbol:
+        yfm_symbol = symbol.replace("/", "-")
+
+    interval = tf_map.get(timeframe, '1d')
+    # Use 1h for 4h if not available, or just fallback mapping
+    
+    try:
+        # For crypto, yfinance gets plenty of history
+        period = "max" if timeframe in ['1M', '1w', '1d'] else "2y"
+        
+        ticker = yf.Ticker(yfm_symbol)
+        df = ticker.history(period=period, interval=interval)
+        
+        if df.empty:
+            return None, f"Yahoo Finance returned no data for {yfm_symbol}"
+        
+        # Reset index to make timestamp a column and rename columns to match ccxt format
+        df = df.reset_index()
+        df.rename(columns={
+            'Date': 'timestamp', 
+            'Datetime': 'timestamp',
+            'Open': 'open', 
+            'High': 'high', 
+            'Low': 'low', 
+            'Close': 'close', 
+            'Volume': 'volume'
+        }, inplace=True)
+        
+        # Ensure timestamp is datetime
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        
+        # If 4h was requested, resample the 1h data
+        if timeframe == '4h' and interval == '1h':
+            df.set_index('timestamp', inplace=True)
+            resampled = df.resample('4h').agg({
+                'open': 'first',
+                'high': 'max',
+                'low': 'min',
+                'close': 'last',
+                'volume': 'sum'
+            }).dropna()
+            df = resampled.reset_index()
+
+        return df, None
+    except Exception as e:
+        return None, str(e)
 
 def calculate_indicators(df):
     """Calculates SMA, EMA, MACD."""
