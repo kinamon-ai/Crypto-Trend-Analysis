@@ -52,17 +52,23 @@ def get_anomaly_phase():
     return phase, bias
 
 def fetch_data(exchange, symbol, timeframe, limit, retries=3):
-    """Fetches OHLCV data from the exchange with retries."""
+    """Fetches OHLCV data from the exchange with retries. Returns (df, last_error)."""
+    last_error = "Unknown error"
     for attempt in range(retries):
         try:
             ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+            if not ohlcv or len(ohlcv) == 0:
+                last_error = "Exchange returned 0 bars"
+                time.sleep(1)
+                continue
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            return df
+            return df, None
         except Exception as e:
+            last_error = str(e)
             print(f"Error fetching data for {timeframe} (Attempt {attempt+1}/{retries}): {e}")
             time.sleep(1 * (attempt + 1)) # Exponential backoff
-    return None
+    return None, last_error
 
 def calculate_indicators(df):
     """Calculates SMA, EMA, MACD."""
@@ -200,21 +206,23 @@ def main():
 
     for tf_key, tf_val in TIMEFRAMES.items():
         print(f"{tf_key}のデータを取得中...")
-        df = fetch_data(exchange, SYMBOL, tf_val, LIMIT)
-        df = calculate_indicators(df)
+        df, error = fetch_data(exchange, SYMBOL, tf_val, LIMIT)
         
-        trend = analyze_trend(df, tf_key)
-        trend_summary[tf_key] = trend
-        
-        signals = detect_signals(df, tf_key)
-        all_signals.extend(signals)
-        
-        # Prepare data for summary table
         if df is not None:
-             last_price = df.iloc[-1]['close']
-             sma200 = df.iloc[-1]['SMA200'] if 'SMA200' in df.columns and not pd.isna(df.iloc[-1]['SMA200']) else 0
-             macd_val = df.iloc[-1]['MACD'] if 'MACD' in df.columns and not pd.isna(df.iloc[-1]['MACD']) else 0
-             rows.append([tf_key, last_price, trend, f"{sma200:.2f}", f"{macd_val:.2f}"])
+            df = calculate_indicators(df)
+            trend = analyze_trend(df, tf_key)
+            trend_summary[tf_key] = trend
+            
+            signals = detect_signals(df, tf_key)
+            all_signals.extend(signals)
+            
+            # Prepare data for summary table
+            last_price = df.iloc[-1]['close']
+            sma200 = df.iloc[-1]['SMA200'] if 'SMA200' in df.columns and not pd.isna(df.iloc[-1]['SMA200']) else 0
+            macd_val = df.iloc[-1]['MACD'] if 'MACD' in df.columns and not pd.isna(df.iloc[-1]['MACD']) else 0
+            rows.append([tf_key, last_price, trend, f"{sma200:.2f}", f"{macd_val:.2f}"])
+        else:
+            print(f"Error fetching {tf_key}: {error}")
         time.sleep(0.5) # Avoid rate limits
 
     # 4. Output Summary

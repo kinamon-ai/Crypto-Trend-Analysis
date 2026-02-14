@@ -57,15 +57,10 @@ st.sidebar.write("Developed based on Cycle & Trend Logic")
 @st.cache_data(ttl=300) # Cache data for 5 minutes
 def load_data(exch_id, sym, tf, limit):
     exchange = getattr(ccxt, exch_id)()
-    try:
-        # Add a small delay to respect rate limits
-        time.sleep(0.5) 
-        df = logic.fetch_data(exchange, sym, tf, limit)
-        if df is None:
-            return None, "Exchange returned empty data"
-        return df, None
-    except Exception as e:
-        return None, str(e)
+    # Add a small delay to respect rate limits
+    time.sleep(0.5) 
+    df, error = logic.fetch_data(exchange, sym, tf, limit)
+    return df, error
 
 def plot_chart(df, timeframe):
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
