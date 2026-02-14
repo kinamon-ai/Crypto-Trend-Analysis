@@ -48,7 +48,7 @@ st.markdown("""
 # --- Sidebar ---
 st.sidebar.title("設定")
 symbol = st.sidebar.text_input("シンボル", value="BTC/USDT")
-exchange_id = st.sidebar.selectbox("取引所", ["binance", "bybit", "bitget"], index=0)
+exchange_id = st.sidebar.selectbox("取引所", ["bybit", "binance", "bitget"], index=0)
 
 st.sidebar.markdown("---")
 st.sidebar.write("Developed based on Cycle & Trend Logic")
@@ -170,6 +170,9 @@ if all_signals:
         st.warning(sig, icon="⚠️")
 else:
     st.info("現在、高確率なシグナルは検知されていません。", icon="✅")
+    
+st.sidebar.info("💡 **Tips**: もし『Service unavailable from a restricted location』等のエラーが出る場合は、取引所を Bybit や Bitget に変更してお試しください（サーバーの設置場所による制限です）。")
+
 
 st.markdown("---")
 
