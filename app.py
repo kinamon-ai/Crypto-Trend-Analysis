@@ -58,12 +58,14 @@ st.sidebar.write("Developed based on Cycle & Trend Logic")
 def load_data(exch_id, sym, tf, limit):
     exchange = getattr(ccxt, exch_id)()
     try:
-        # Add a small delay to respect rate limits, especially on shared cloud IPs
+        # Add a small delay to respect rate limits
         time.sleep(0.5) 
-        return logic.fetch_data(exchange, sym, tf, limit)
+        df = logic.fetch_data(exchange, sym, tf, limit)
+        if df is None:
+            return None, "Exchange returned empty data"
+        return df, None
     except Exception as e:
-        st.error(f"Error loading data for {tf}: {e}")
-        return None
+        return None, str(e)
 
 def plot_chart(df, timeframe):
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
@@ -124,22 +126,27 @@ step = 100 // len(tfs)
 dfs = {}
 
 for i, (tf_key, tf_val) in enumerate(tfs.items()):
-    df = load_data(exchange_id, symbol, tf_val, logic.LIMIT)
-    df = logic.calculate_indicators(df)
-    dfs[tf_key] = df
+    df, error_msg = load_data(exchange_id, symbol, tf_val, logic.LIMIT)
     
-    trend = logic.analyze_trend(df, tf_key)
-    signals = logic.detect_signals(df, tf_key)
-    all_signals.extend(signals)
-    
-    if df is not None and not df.empty:
-         last_row = df.iloc[-1]
-         price = last_row['close']
-         sma200 = last_row.get('SMA200', 0)
-         macd = last_row.get('MACD', 0)
-         rows.append([tf_key, f"{price:,.2f}", trend, f"{sma200:,.2f}" if not pd.isna(sma200) else "N/A", f"{macd:.2f}" if not pd.isna(macd) else "N/A"])
+    if df is not None:
+        df = logic.calculate_indicators(df)
+        dfs[tf_key] = df
+        
+        trend = logic.analyze_trend(df, tf_key)
+        signals = logic.detect_signals(df, tf_key)
+        all_signals.extend(signals)
+        
+        if not df.empty:
+             last_row = df.iloc[-1]
+             price = last_row['close']
+             sma200 = last_row.get('SMA200', 0)
+             macd = last_row.get('MACD', 0)
+             rows.append([tf_key, f"{price:,.2f}", trend, f"{sma200:,.2f}" if not pd.isna(sma200) else "N/A", f"{macd:.2f}" if not pd.isna(macd) else "N/A"])
+        else:
+            rows.append([tf_key, "N/A", "Empty Data", "N/A", "N/A"])
     else:
-        rows.append([tf_key, "N/A", "Error", "N/A", "N/A"])
+        # Display the specific error message from the capture
+        rows.append([tf_key, "N/A", f"Error: {error_msg}", "N/A", "N/A"])
 
     percent_complete += step
     my_bar.progress(min(percent_complete, 100), text=f"{tf_key} 完了")
