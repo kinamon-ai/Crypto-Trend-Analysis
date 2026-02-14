@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import ccxt
+import time
 import analysis_logic as logic
 
 # --- Configuration ---
@@ -56,7 +57,13 @@ st.sidebar.write("Developed based on Cycle & Trend Logic")
 @st.cache_data(ttl=300) # Cache data for 5 minutes
 def load_data(exch_id, sym, tf, limit):
     exchange = getattr(ccxt, exch_id)()
-    return logic.fetch_data(exchange, sym, tf, limit)
+    try:
+        # Add a small delay to respect rate limits, especially on shared cloud IPs
+        time.sleep(0.5) 
+        return logic.fetch_data(exchange, sym, tf, limit)
+    except Exception as e:
+        st.error(f"Error loading data for {tf}: {e}")
+        return None
 
 def plot_chart(df, timeframe):
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 

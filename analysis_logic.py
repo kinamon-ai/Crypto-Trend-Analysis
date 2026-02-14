@@ -51,16 +51,18 @@ def get_anomaly_phase():
         
     return phase, bias
 
-def fetch_data(exchange, symbol, timeframe, limit):
-    """Fetches OHLCV data from the exchange."""
-    try:
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
-        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        return df
-    except Exception as e:
-        print(f"Error fetching data for {timeframe}: {e}")
-        return None
+def fetch_data(exchange, symbol, timeframe, limit, retries=3):
+    """Fetches OHLCV data from the exchange with retries."""
+    for attempt in range(retries):
+        try:
+            ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            return df
+        except Exception as e:
+            print(f"Error fetching data for {timeframe} (Attempt {attempt+1}/{retries}): {e}")
+            time.sleep(1 * (attempt + 1)) # Exponential backoff
+    return None
 
 def calculate_indicators(df):
     """Calculates SMA, EMA, MACD."""
